@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Aflac - Shares Outstanding</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 2rem; background-color: #f0f8ff; color: #003366; }
+h1 { color: #004080; }
+section { margin-top: 1.5rem; padding: 1rem; background: #e6f0ff; border-radius: 8px; max-width: 480px; }
+dl { display: flex; flex-wrap: wrap; }
+dt, dd { flex: 1 1 50%; margin: 0; padding: 0.25rem 0; }
+dt { font-weight: bold; }
+#share-max-value, #share-min-value { color: #004d00; font-weight: 700; font-size: 1.2rem; }
+#share-max-fy, #share-min-fy { font-style: italic; }
+footer { margin-top: 3rem; font-size: 0.9rem; color: #666; }
+</style>
+</head>
+<body>
+<h1 id="share-entity-name">Aflac</h1>
+<section>
+<h2>Shares Outstanding Data</h2>
+<dl>
+  <dt>Maximum Shares Outstanding:</dt>
+  <dd><span id="share-max-value">368621000</span> shares in fiscal year <span id="share-max-fy">2022</span></dd>
+  <dt>Minimum Shares Outstanding:</dt>
+  <dd><span id="share-min-value">350424000</span> shares in fiscal year <span id="share-min-fy">2021</span></dd>
+</dl>
+</section>
+<footer>
+  <p>Data fetched from SEC EDGAR.</p>
+</footer>
+<script>
+async function fetchData(cik) {
+  const cicPad = cik.padStart(10, '0');
+  const url = `https://data.sec.gov/api/xbrl/companyconcept/CIK${cicPad}/dei/EntityCommonStockSharesOutstanding.json`;
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'AflacSharesApp your-email@example.com'
+      }
+    });
+    if (!response.ok) throw new Error(`HTTP status ${response.status}`);
+    const json = await response.json();
+    return json;
+  } catch (error) {
+    console.error('Failed to fetch data, using fallback:', error);
+    return null;
+  }
+}
+
+function processData(data) {
+  if (!data || !data.units || !data.units.shares) return null;
+  const entityName = data.entityName || 'Unknown';
+  // Filter fy > "2020" and numeric val
+  const filtered = data.units.shares.filter(entry => {
+    return entry.fy > "2020" && typeof entry.val === 'number';
+  });
+  if (filtered.length === 0) return null;
+  let maxEntry = filtered[0], minEntry = filtered[0];
+  filtered.forEach(e => {
+    if (e.val > maxEntry.val) maxEntry = e;
+    if (e.val < minEntry.val) minEntry = e;
+  });
+  return {
+    entityName,
+    max: { val: maxEntry.val, fy: maxEntry.fy },
+    min: { val: minEntry.val, fy: minEntry.fy }
+  };
+}
+
+function render(data) {
+  if (!data) return;
+  document.title = `${data.entityName} - Shares Outstanding`;
+  const nameEl = document.getElementById('share-entity-name');
+  const maxValEl = document.getElementById('share-max-value');
+  const maxFyEl = document.getElementById('share-max-fy');
+  const minValEl = document.getElementById('share-min-value');
+  const minFyEl = document.getElementById('share-min-fy');
+  nameEl.textContent = data.entityName;
+  maxValEl.textContent = data.max.val.toLocaleString();
+  maxFyEl.textContent = data.max.fy;
+  minValEl.textContent = data.min.val.toLocaleString();
+  minFyEl.textContent = data.min.fy;
+}
+
+(async () => {
+  const params = new URLSearchParams(window.location.search);
+  const cikParam = params.get('CIK');
+  if (cikParam && /^\d{10}$/.test(cikParam)) {
+    const json = await fetchData(cikParam);
+    const processed = processData(json);
+    if (processed) {
+      render(processed);
+    }
+  } else {
+    // Load default embedded data (Aflac, CIK0000004977)
+    const defaultUrl = 'https://data.sec.gov/api/xbrl/companyconcept/CIK0000004977/dei/EntityCommonStockSharesOutstanding.json';
+    try {
+      const res = await fetch(defaultUrl, {
+        headers: { 'User-Agent': 'AflacSharesApp your-email@example.com' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const processed = processData(json);
+        if (processed) render(processed);
+      }
+    } catch(e) {
+      console.error('Failed to fetch default data', e);
+    }
+  }
+})();
+</script>
+</body>
+</html>
